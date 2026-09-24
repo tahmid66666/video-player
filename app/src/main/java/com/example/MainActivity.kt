@@ -6,13 +6,17 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ui.PlayerScreen
 import com.example.ui.PlayerViewModel
+import com.example.ui.ThemeMode
 import com.example.ui.theme.MyApplicationTheme
-import com.example.ui.theme.YouTubeDarkBg
 
 class MainActivity : ComponentActivity() {
 
@@ -22,10 +26,18 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            MyApplicationTheme {
+            val themeMode by playerViewModel.themeMode.collectAsStateWithLifecycle()
+            val systemDark = isSystemInDarkTheme()
+            val isDark = when (themeMode) {
+                ThemeMode.DARK -> true
+                ThemeMode.LIGHT -> false
+                ThemeMode.SYSTEM -> systemDark
+            }
+
+            MyApplicationTheme(darkTheme = isDark) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = YouTubeDarkBg
+                    color = MaterialTheme.colorScheme.background
                 ) {
                     PlayerScreen(viewModel = playerViewModel)
                 }
@@ -48,11 +60,23 @@ class MainActivity : ComponentActivity() {
     override fun onPause() {
         super.onPause()
         playerViewModel.saveCurrentPlaybackPosition()
+        if (!playerViewModel.isBackgroundPlaybackEnabled.value) {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                if (!isInPictureInPictureMode) {
+                    playerViewModel.pausePlayback()
+                }
+            } else {
+                playerViewModel.pausePlayback()
+            }
+        }
     }
 
     override fun onStop() {
         super.onStop()
         playerViewModel.saveCurrentPlaybackPosition()
+        if (!playerViewModel.isBackgroundPlaybackEnabled.value) {
+            playerViewModel.pausePlayback()
+        }
     }
 
     override fun onUserLeaveHint() {

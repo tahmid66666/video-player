@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "Offline Video Player"
+rootProject.name = "Video Player by Tahmid"
 
 include(":app")

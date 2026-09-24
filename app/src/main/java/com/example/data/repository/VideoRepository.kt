@@ -2,7 +2,7 @@ package com.example.data.repository
 
 import android.content.Context
 import android.net.Uri
-import com.example.R
+import android.provider.MediaStore
 import com.example.data.dao.VideoDao
 import com.example.data.model.VideoEntity
 import kotlinx.coroutines.Dispatchers
@@ -16,40 +16,12 @@ class VideoRepository(
     val allVideos: Flow<List<VideoEntity>> = videoDao.getAllVideos()
 
     suspend fun initializeDefaultVideosIfEmpty() = withContext(Dispatchers.IO) {
-        val count = videoDao.getVideoCount()
-        if (count == 0) {
-            val pkg = context.packageName
-            val sampleVideos = listOf(
-                VideoEntity(
-                    id = "sample_cosmic",
-                    title = "Cosmic Odyssey (Offline Demo)",
-                    uriString = "android.resource://$pkg/${R.raw.sample_cosmic}",
-                    durationMs = 18000L,
-                    resolution = "720p HD",
-                    subtitleUri = "raw/subtitles_cosmic.srt",
-                    orderIndex = 0
-                ),
-                VideoEntity(
-                    id = "sample_neon",
-                    title = "Neon Horizon (Synthwave Loop)",
-                    uriString = "android.resource://$pkg/${R.raw.sample_neon}",
-                    durationMs = 15000L,
-                    resolution = "720p HD",
-                    subtitleUri = "raw/subtitles_neon.srt",
-                    orderIndex = 1
-                ),
-                VideoEntity(
-                    id = "sample_test",
-                    title = "Broadcast Test Pattern & Tone",
-                    uriString = "android.resource://$pkg/${R.raw.sample_test}",
-                    durationMs = 12000L,
-                    resolution = "720p Standard",
-                    subtitleUri = null,
-                    orderIndex = 2
-                )
-            )
-            videoDao.insertAll(sampleVideos)
-        }
+        // Automatically purge any remaining demo/sample videos so library starts clean
+        videoDao.deleteDemoVideos()
+    }
+
+    suspend fun purgeDemoVideos() = withContext(Dispatchers.IO) {
+        videoDao.deleteDemoVideos()
     }
 
     suspend fun addVideo(video: VideoEntity) = withContext(Dispatchers.IO) {
@@ -85,6 +57,60 @@ class VideoRepository(
 
     suspend fun toggleFavorite(id: String) = withContext(Dispatchers.IO) {
         videoDao.toggleFavorite(id)
+    }
+
+    suspend fun renameVideo(id: String, newTitle: String) = withContext(Dispatchers.IO) {
+        videoDao.updateTitle(id, newTitle)
+    }
+
+    suspend fun scanDeviceStorage(): Int = withContext(Dispatchers.IO) {
+        var addedCount = 0
+        try {
+            val projection = arrayOf(
+                MediaStore.Video.Media._ID,
+                MediaStore.Video.Media.TITLE,
+                MediaStore.Video.Media.DISPLAY_NAME,
+                MediaStore.Video.Media.DURATION
+            )
+            val uri = MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+            val cursor = context.contentResolver.query(
+                uri,
+                projection,
+                null,
+                null,
+                "${MediaStore.Video.Media.DATE_ADDED} DESC"
+            )
+            cursor?.use {
+                val idCol = it.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
+                val titleCol = it.getColumnIndexOrThrow(MediaStore.Video.Media.TITLE)
+                val nameCol = it.getColumnIndexOrThrow(MediaStore.Video.Media.DISPLAY_NAME)
+                val durCol = it.getColumnIndexOrThrow(MediaStore.Video.Media.DURATION)
+
+                while (it.moveToNext()) {
+                    val mediaId = it.getLong(idCol)
+                    val contentUri = Uri.withAppendedPath(uri, mediaId.toString()).toString()
+                    val title = it.getString(titleCol) ?: it.getString(nameCol) ?: "Video $mediaId"
+                    val duration = it.getLong(durCol)
+
+                    val existing = videoDao.getVideoById(contentUri)
+                    if (existing == null) {
+                        val entity = VideoEntity(
+                            id = contentUri,
+                            title = title,
+                            uriString = contentUri,
+                            durationMs = duration,
+                            resolution = "Local Storage",
+                            orderIndex = 999
+                        )
+                        videoDao.insertVideo(entity)
+                        addedCount++
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            // Handled gracefully if no media or permission not yet granted
+        }
+        addedCount
     }
 
     suspend fun deleteVideo(id: String) = withContext(Dispatchers.IO) {

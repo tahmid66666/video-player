@@ -34,11 +34,17 @@ interface VideoDao {
     @Query("UPDATE videos SET durationMs = :durationMs WHERE id = :id")
     suspend fun updateDuration(id: String, durationMs: Long)
 
+    @Query("UPDATE videos SET title = :newTitle WHERE id = :id")
+    suspend fun updateTitle(id: String, newTitle: String)
+
     @Query("UPDATE videos SET isFavorite = NOT isFavorite WHERE id = :id")
     suspend fun toggleFavorite(id: String)
 
     @Query("DELETE FROM videos WHERE id = :id")
     suspend fun deleteVideo(id: String)
+
+    @Query("DELETE FROM videos WHERE id LIKE 'sample_%' OR uriString LIKE 'android.resource://%' OR title LIKE '%(Offline Demo)%'")
+    suspend fun deleteDemoVideos()
 
     @Query("SELECT COUNT(*) FROM videos")
     suspend fun getVideoCount(): Int

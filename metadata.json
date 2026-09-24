@@ -1,6 +1,6 @@
 {
-  "name": "Remix Offline Video Player",
-  "description": "YouTube-style offline video player with gesture controls for brightness and volume, PiP, subtitles, playback speed, and drag-to-seek.",
+  "name": "Video Player by Tahmid",
+  "description": "YouTube-style offline video player with adaptive grid browsing, gesture controls, screenshot capture, settings customization, PiP, and subtitles.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

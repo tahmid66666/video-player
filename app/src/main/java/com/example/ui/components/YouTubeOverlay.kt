@@ -22,12 +22,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.ClosedCaptionDisabled
+import androidx.compose.material.icons.filled.FastForward
+import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PictureInPictureAlt
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Repeat
@@ -72,6 +75,7 @@ fun YouTubeOverlay(
     isShuffleEnabled: Boolean,
     isSubtitlesEnabled: Boolean,
     isLandscape: Boolean,
+    seekSeconds: Int = 10,
     onPlayPauseClick: () -> Unit,
     onRewind10: () -> Unit,
     onForward10: () -> Unit,
@@ -88,6 +92,9 @@ fun YouTubeOverlay(
     onPipClick: () -> Unit,
     onOrientationToggle: () -> Unit,
     onDetailsClick: () -> Unit,
+    onScreenshotClick: () -> Unit = {},
+    onManualRotateClick: () -> Unit = onOrientationToggle,
+    onCollapseClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     AnimatedVisibility(
@@ -111,7 +118,13 @@ fun YouTubeOverlay(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(
-                    onClick = onOrientationToggle,
+                    onClick = {
+                        if (isLandscape) {
+                            onOrientationToggle()
+                        } else {
+                            onCollapseClick()
+                        }
+                    },
                     modifier = Modifier.testTag("collapse_button")
                 ) {
                     Icon(
@@ -173,6 +186,32 @@ fun YouTubeOverlay(
 
                 Spacer(modifier = Modifier.width(4.dp))
 
+                // Screenshot Capture Button
+                IconButton(
+                    onClick = onScreenshotClick,
+                    modifier = Modifier.testTag("screenshot_capture_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PhotoCamera,
+                        contentDescription = "Capture Screenshot",
+                        tint = Color.White,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+
+                // Manual Rotation Button
+                IconButton(
+                    onClick = onManualRotateClick,
+                    modifier = Modifier.testTag("manual_rotate_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ScreenRotation,
+                        contentDescription = "Rotate Screen Orientation",
+                        tint = Color.White,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+
                 // PiP Button
                 IconButton(
                     onClick = onPipClick,
@@ -223,19 +262,30 @@ fun YouTubeOverlay(
                     )
                 }
 
-                // Rewind 10s
+                // Rewind by seekSeconds
                 IconButton(
                     onClick = onRewind10,
                     modifier = Modifier
                         .size(48.dp)
                         .testTag("rewind_10_button")
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Replay10,
-                        contentDescription = "Rewind 10 seconds",
-                        tint = Color.White,
-                        modifier = Modifier.size(36.dp)
-                    )
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FastRewind,
+                            contentDescription = "Rewind $seekSeconds seconds",
+                            tint = Color.White,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Text(
+                            text = "${seekSeconds}s",
+                            color = Color.White,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
 
                 // Big Center Play/Pause Button
@@ -256,19 +306,30 @@ fun YouTubeOverlay(
                     )
                 }
 
-                // Fast Forward 10s
+                // Fast Forward by seekSeconds
                 IconButton(
                     onClick = onForward10,
                     modifier = Modifier
                         .size(48.dp)
                         .testTag("forward_10_button")
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Replay10, // will be mirrored / standard forward
-                        contentDescription = "Forward 10 seconds",
-                        tint = Color.White,
-                        modifier = Modifier.size(36.dp)
-                    )
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FastForward,
+                            contentDescription = "Forward $seekSeconds seconds",
+                            tint = Color.White,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Text(
+                            text = "${seekSeconds}s",
+                            color = Color.White,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
 
                 // Next

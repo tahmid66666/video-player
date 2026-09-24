@@ -86,11 +86,13 @@ fun PlaylistQueueView(
     isShuffleEnabled: Boolean,
     modifier: Modifier = Modifier
 ) {
-    // Media picker for picking any local video from device storage
+    // Media picker for picking local video files from device storage (supports multi-select)
     val videoPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        uri?.let { viewModel.addImportedVideo(it) }
+        contract = ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris: List<Uri> ->
+        if (uris.isNotEmpty()) {
+            viewModel.addImportedVideos(uris, autoPlayFirst = false)
+        }
     }
 
     // Subtitle picker for loading external SRT subtitle file
@@ -149,9 +151,20 @@ fun PlaylistQueueView(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Import Video Button
+                    // Import / Add Video Button
                     Button(
-                        onClick = { videoPickerLauncher.launch(arrayOf("video/*")) },
+                        onClick = {
+                            videoPickerLauncher.launch(
+                                arrayOf(
+                                    "video/*",
+                                    "video/mp4",
+                                    "video/x-matroska",
+                                    "video/webm",
+                                    "video/quicktime",
+                                    "video/avi"
+                                )
+                            )
+                        },
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color(0x33FFFFFF),
                             contentColor = Color.White
@@ -167,7 +180,7 @@ fun PlaylistQueueView(
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Import Video", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        Text("Add Videos", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                     }
 
                     // Load Subtitles Button

@@ -6,6 +6,7 @@ import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.os.Build
 import android.util.Rational
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,7 +16,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -24,10 +24,14 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.ui.components.PlaybackSpeedOverlay
 import com.example.ui.components.PlaylistQueueView
 import com.example.ui.components.SpeedBottomSheet
 import com.example.ui.components.VideoDetailsDialog
 import com.example.ui.components.VideoPlayerView
+import com.example.ui.screens.FolderScreen
+import com.example.ui.screens.HomeScreen
+import com.example.ui.screens.SettingsScreen
 import com.example.ui.theme.YouTubeDarkBg
 
 @Composable
@@ -39,6 +43,7 @@ fun PlayerScreen(
     val activity = context as? Activity
     val configuration = LocalConfiguration.current
 
+    val currentScreen by viewModel.currentScreen.collectAsStateWithLifecycle()
     val currentVideo by viewModel.currentVideo.collectAsStateWithLifecycle()
     val videos by viewModel.videos.collectAsStateWithLifecycle()
     val playbackSpeed by viewModel.playbackSpeed.collectAsStateWithLifecycle()
@@ -46,6 +51,7 @@ fun PlayerScreen(
     val isShuffleEnabled by viewModel.isShuffleEnabled.collectAsStateWithLifecycle()
     val isSubtitlesEnabled by viewModel.isSubtitlesEnabled.collectAsStateWithLifecycle()
     val isSpeedSheetVisible by viewModel.isSpeedSheetVisible.collectAsStateWithLifecycle()
+    val isSpeedOverlayVisible by viewModel.isSpeedOverlayVisible.collectAsStateWithLifecycle()
     val isDetailsDialogVisible by viewModel.isDetailsDialogVisible.collectAsStateWithLifecycle()
 
     val isDeviceLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -80,70 +86,112 @@ fun PlayerScreen(
         }
     }
 
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(YouTubeDarkBg)
-    ) {
-        if (isLandscape) {
-            // Fullscreen Cinematic Landscape Layout
-            VideoPlayerView(
-                viewModel = viewModel,
-                onOrientationToggle = onToggleOrientation,
-                onPipClick = { onEnterPip() },
-                modifier = Modifier.fillMaxSize()
-            )
-        } else {
-            // Portrait Layout: Video Player on top (16:9), Playlist/Info below
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .statusBarsPadding()
-                    .navigationBarsPadding()
-            ) {
-                // Top 16:9 YouTube Video Player
-                VideoPlayerView(
-                    viewModel = viewModel,
-                    onOrientationToggle = onToggleOrientation,
-                    onPipClick = { onEnterPip() },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(16f / 9f)
-                )
-
-                // Playlist Queue & Controls below player
-                PlaylistQueueView(
-                    viewModel = viewModel,
-                    videos = videos,
-                    currentVideo = currentVideo,
-                    playbackSpeed = playbackSpeed,
-                    isSubtitlesEnabled = isSubtitlesEnabled,
-                    repeatMode = repeatMode,
-                    isShuffleEnabled = isShuffleEnabled,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                )
+    // Handle back button behavior to transition back to Home Screen
+    BackHandler(enabled = currentScreen != PlayerScreenType.HOME) {
+        if (currentScreen == PlayerScreenType.PLAYER) {
+            if (isLandscape) {
+                activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                viewModel.setLandscape(false)
+            } else {
+                viewModel.navigateTo(PlayerScreenType.HOME)
             }
+        } else {
+            viewModel.navigateTo(PlayerScreenType.HOME)
         }
+    }
 
-        // Playback Speed Bottom Sheet
-        if (isSpeedSheetVisible) {
-            SpeedBottomSheet(
-                currentSpeed = playbackSpeed,
-                onSpeedSelected = { viewModel.setPlaybackSpeed(it) },
-                onDismiss = { viewModel.closeSpeedSheet() }
+    when (currentScreen) {
+        PlayerScreenType.HOME -> {
+            HomeScreen(
+                viewModel = viewModel,
+                modifier = modifier
             )
         }
-
-        // Video Details Dialog
-        if (isDetailsDialogVisible) {
-            VideoDetailsDialog(
-                video = currentVideo,
-                currentSpeed = playbackSpeed,
-                isSubtitlesOn = isSubtitlesEnabled,
-                onDismiss = { viewModel.closeDetailsDialog() }
+        PlayerScreenType.FOLDERS -> {
+            FolderScreen(
+                viewModel = viewModel,
+                modifier = modifier
             )
+        }
+        PlayerScreenType.SETTINGS -> {
+            SettingsScreen(
+                viewModel = viewModel,
+                onBack = { viewModel.navigateTo(PlayerScreenType.HOME) },
+                modifier = modifier
+            )
+        }
+        PlayerScreenType.PLAYER -> {
+            Box(
+                modifier = modifier
+                    .fillMaxSize()
+                    .background(YouTubeDarkBg)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .then(
+                            if (isLandscape) Modifier else Modifier.statusBarsPadding().navigationBarsPadding()
+                        )
+                ) {
+                    // Single persistent Video Player instance across portrait and landscape
+                    VideoPlayerView(
+                        viewModel = viewModel,
+                        onOrientationToggle = onToggleOrientation,
+                        onPipClick = { onEnterPip() },
+                        modifier = if (isLandscape) {
+                            Modifier.fillMaxSize()
+                        } else {
+                            Modifier
+                                .fillMaxWidth()
+                                .aspectRatio(16f / 9f)
+                        }
+                    )
+
+                    // Playlist Queue & Controls below player (visible in portrait mode)
+                    if (!isLandscape) {
+                        PlaylistQueueView(
+                            viewModel = viewModel,
+                            videos = videos,
+                            currentVideo = currentVideo,
+                            playbackSpeed = playbackSpeed,
+                            isSubtitlesEnabled = isSubtitlesEnabled,
+                            repeatMode = repeatMode,
+                            isShuffleEnabled = isShuffleEnabled,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f)
+                        )
+                    }
+                }
+
+                // Playback Speed Control Overlay (ExoPlayer PlaybackParameters)
+                PlaybackSpeedOverlay(
+                    isVisible = isSpeedOverlayVisible,
+                    currentSpeed = playbackSpeed,
+                    onSpeedSelected = { viewModel.setPlaybackSpeed(it) },
+                    onSpeedChangedLive = { viewModel.applyPlaybackSpeed(it) },
+                    onDismiss = { viewModel.closeSpeedOverlay() }
+                )
+
+                // Playback Speed Bottom Sheet fallback
+                if (isSpeedSheetVisible && !isSpeedOverlayVisible) {
+                    SpeedBottomSheet(
+                        currentSpeed = playbackSpeed,
+                        onSpeedSelected = { viewModel.setPlaybackSpeed(it) },
+                        onDismiss = { viewModel.closeSpeedSheet() }
+                    )
+                }
+
+                // Video Details Dialog
+                if (isDetailsDialogVisible) {
+                    VideoDetailsDialog(
+                        video = currentVideo,
+                        currentSpeed = playbackSpeed,
+                        isSubtitlesOn = isSubtitlesEnabled,
+                        onDismiss = { viewModel.closeDetailsDialog() }
+                    )
+                }
+            }
         }
     }
 }

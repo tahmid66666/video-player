@@ -2,7 +2,6 @@ package com.example.util
 
 import android.content.Context
 import android.net.Uri
-import com.example.R
 import java.io.BufferedReader
 import java.io.InputStreamReader
 

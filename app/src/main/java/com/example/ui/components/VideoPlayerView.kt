@@ -3,7 +3,6 @@ package com.example.ui.components
 import android.app.Activity
 import android.content.Context
 import android.media.AudioManager
-import android.net.Uri
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.annotation.OptIn
@@ -31,10 +30,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -48,18 +45,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.media3.common.MediaItem
-import androidx.media3.common.PlaybackParameters
-import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.example.ui.PlayerViewModel
-import com.example.ui.RepeatMode
 import com.example.ui.SeekDirection
 import com.example.ui.theme.YouTubeBlue
 import com.example.ui.theme.YouTubeRed
-import kotlinx.coroutines.delay
 
 @OptIn(UnstableApi::class)
 @Composable
@@ -89,135 +80,23 @@ fun VideoPlayerView(
     val volumePercent by viewModel.volumePercent.collectAsStateWithLifecycle()
     val seekFeedback by viewModel.seekFeedback.collectAsStateWithLifecycle()
     val isLandscape by viewModel.isLandscape.collectAsStateWithLifecycle()
-    val resumeEvent by viewModel.resumeEvent.collectAsStateWithLifecycle()
     val resumeNotification by viewModel.resumeNotification.collectAsStateWithLifecycle()
+    val screenshotSuccess by viewModel.screenshotSuccess.collectAsStateWithLifecycle()
+    val doubleTapSeekSeconds by viewModel.doubleTapSeekSeconds.collectAsStateWithLifecycle()
+    val isKeepScreenOnEnabled by viewModel.isKeepScreenOnEnabled.collectAsStateWithLifecycle()
 
-    val exoPlayer = remember {
-        ExoPlayer.Builder(context).build().apply {
-            playWhenReady = true
-        }
-    }
-
-    // Handle repeat mode on ExoPlayer
-    LaunchedEffect(repeatMode) {
-        exoPlayer.repeatMode = when (repeatMode) {
-            RepeatMode.OFF -> Player.REPEAT_MODE_OFF
-            RepeatMode.ONE -> Player.REPEAT_MODE_ONE
-            RepeatMode.ALL -> Player.REPEAT_MODE_ALL
-        }
-    }
-
-    // Handle playback speed
-    LaunchedEffect(playbackSpeed) {
-        exoPlayer.playbackParameters = PlaybackParameters(playbackSpeed)
-    }
-
-    // Handle video change and automatic resume from last saved Room database position
-    LaunchedEffect(resumeEvent) {
-        resumeEvent?.let { event ->
-            val video = currentVideo ?: return@let
-            if (video.id == event.videoId) {
-                try {
-                    val uri = Uri.parse(video.uriString)
-                    val currentUri = exoPlayer.currentMediaItem?.localConfiguration?.uri?.toString()
-                    if (currentUri != video.uriString) {
-                        val mediaItem = MediaItem.fromUri(uri)
-                        exoPlayer.setMediaItem(mediaItem)
-                        exoPlayer.prepare()
-                    }
-                    if (event.positionMs > 0L) {
-                        exoPlayer.seekTo(event.positionMs)
-                    } else {
-                        exoPlayer.seekTo(0L)
-                    }
-                    exoPlayer.playWhenReady = true
-                    viewModel.onPlaybackStateChanged(true)
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-            }
-        }
-    }
-
-    // Fallback: If currentVideo changes without an explicit resumeEvent yet
-    LaunchedEffect(currentVideo?.uriString) {
-        val video = currentVideo ?: return@LaunchedEffect
-        val currentUri = exoPlayer.currentMediaItem?.localConfiguration?.uri?.toString()
-        if (currentUri != video.uriString) {
-            try {
-                val mediaItem = MediaItem.fromUri(Uri.parse(video.uriString))
-                exoPlayer.setMediaItem(mediaItem)
-                exoPlayer.prepare()
-                if (video.lastPositionMs > 0L) {
-                    exoPlayer.seekTo(video.lastPositionMs)
-                }
-                exoPlayer.playWhenReady = true
-                viewModel.onPlaybackStateChanged(true)
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
-    }
-
-    // Sync play/pause state from ViewModel to ExoPlayer
-    LaunchedEffect(isPlaying) {
-        if (exoPlayer.isPlaying != isPlaying) {
-            if (isPlaying) {
-                exoPlayer.play()
-            } else {
-                exoPlayer.pause()
-            }
-        }
-    }
-
-    // Periodic progress updates
-    LaunchedEffect(isPlaying, exoPlayer) {
-        while (true) {
-            if (exoPlayer.playbackState == Player.STATE_READY || exoPlayer.playbackState == Player.STATE_BUFFERING) {
-                val current = exoPlayer.currentPosition.coerceAtLeast(0L)
-                val duration = exoPlayer.duration.coerceAtLeast(0L)
-                val buffered = exoPlayer.bufferedPosition.coerceAtLeast(0L)
-                viewModel.updateProgress(current, duration, buffered)
-            }
-            delay(250)
-        }
-    }
-
-    // Player event listener
-    DisposableEffect(exoPlayer) {
-        val listener = object : Player.Listener {
-            override fun onIsPlayingChanged(playing: Boolean) {
-                viewModel.onPlaybackStateChanged(playing)
-            }
-
-            override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playbackState == Player.STATE_ENDED) {
-                    viewModel.onVideoCompleted()
-                    when (repeatMode) {
-                        RepeatMode.ONE -> {
-                            exoPlayer.seekTo(0)
-                            exoPlayer.play()
-                        }
-                        RepeatMode.ALL, RepeatMode.OFF -> {
-                            val next = viewModel.playNextVideo()
-                            if (next == null && repeatMode == RepeatMode.OFF) {
-                                viewModel.onPlaybackStateChanged(false)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        exoPlayer.addListener(listener)
-
-        onDispose {
-            viewModel.saveCurrentPlaybackPosition()
-            exoPlayer.removeListener(listener)
-            exoPlayer.release()
-        }
-    }
-
+    val exoPlayer = viewModel.exoPlayer
     var dragStartX by remember { mutableFloatStateOf(0f) }
+
+    DisposableEffect(exoPlayer) {
+        onDispose {
+            if (!viewModel.isBackgroundPlaybackEnabled.value) {
+                viewModel.pausePlayback()
+                viewModel.saveCurrentPlaybackPosition()
+            }
+            exoPlayer.clearVideoSurface()
+        }
+    }
 
     Box(
         modifier = modifier
@@ -230,22 +109,11 @@ fun VideoPlayerView(
                         if (!isScreenLocked) {
                             val width = size.width
                             if (offset.x < width * 0.35f) {
-                                val newPos = viewModel.onDoubleTapSeek(
-                                    SeekDirection.BACKWARD,
-                                    exoPlayer.currentPosition,
-                                    exoPlayer.duration
-                                )
-                                exoPlayer.seekTo(newPos)
+                                viewModel.onDoubleTapSeek(SeekDirection.BACKWARD)
                             } else if (offset.x > width * 0.65f) {
-                                val newPos = viewModel.onDoubleTapSeek(
-                                    SeekDirection.FORWARD,
-                                    exoPlayer.currentPosition,
-                                    exoPlayer.duration
-                                )
-                                exoPlayer.seekTo(newPos)
+                                viewModel.onDoubleTapSeek(SeekDirection.FORWARD)
                             } else {
-                                val newPlayState = viewModel.togglePlayPause()
-                                if (newPlayState) exoPlayer.play() else exoPlayer.pause()
+                                viewModel.togglePlayPause()
                             }
                         }
                     },
@@ -293,7 +161,10 @@ fun VideoPlayerView(
                 }
             },
             update = { playerView ->
-                playerView.player = exoPlayer
+                if (playerView.player != exoPlayer) {
+                    playerView.player = exoPlayer
+                }
+                playerView.keepScreenOn = isKeepScreenOnEnabled && isPlaying
             },
             modifier = Modifier.fillMaxSize()
         )
@@ -319,25 +190,15 @@ fun VideoPlayerView(
                 isShuffleEnabled = isShuffleEnabled,
                 isSubtitlesEnabled = isSubtitlesEnabled,
                 isLandscape = isLandscape,
+                seekSeconds = doubleTapSeekSeconds,
                 onPlayPauseClick = {
-                    val nextPlay = viewModel.togglePlayPause()
-                    if (nextPlay) exoPlayer.play() else exoPlayer.pause()
+                    viewModel.togglePlayPause()
                 },
                 onRewind10 = {
-                    val newPos = viewModel.onDoubleTapSeek(
-                        SeekDirection.BACKWARD,
-                        exoPlayer.currentPosition,
-                        exoPlayer.duration
-                    )
-                    exoPlayer.seekTo(newPos)
+                    viewModel.onDoubleTapSeek(SeekDirection.BACKWARD)
                 },
                 onForward10 = {
-                    val newPos = viewModel.onDoubleTapSeek(
-                        SeekDirection.FORWARD,
-                        exoPlayer.currentPosition,
-                        exoPlayer.duration
-                    )
-                    exoPlayer.seekTo(newPos)
+                    viewModel.onDoubleTapSeek(SeekDirection.FORWARD)
                 },
                 onPreviousClick = {
                     viewModel.playPreviousVideo()
@@ -349,15 +210,14 @@ fun VideoPlayerView(
                     viewModel.cancelAutoHide()
                 },
                 onSeekChanged = { seekMs ->
-                    exoPlayer.seekTo(seekMs)
-                    viewModel.updateProgress(seekMs, durationMs, bufferedPositionMs)
+                    viewModel.seekTo(seekMs)
                 },
                 onSeekFinished = { finalMs ->
-                    exoPlayer.seekTo(finalMs)
+                    viewModel.seekTo(finalMs)
                     viewModel.showControls()
                 },
                 onSpeedClick = {
-                    viewModel.openSpeedSheet()
+                    viewModel.openSpeedOverlay()
                 },
                 onSubtitlesToggle = {
                     viewModel.toggleSubtitles()
@@ -375,6 +235,13 @@ fun VideoPlayerView(
                 onOrientationToggle = onOrientationToggle,
                 onDetailsClick = {
                     viewModel.openDetailsDialog()
+                },
+                onScreenshotClick = {
+                    viewModel.captureScreenshot()
+                },
+                onManualRotateClick = onOrientationToggle,
+                onCollapseClick = {
+                    viewModel.navigateTo(com.example.ui.PlayerScreenType.HOME)
                 }
             )
         }
@@ -446,5 +313,14 @@ fun VideoPlayerView(
                 }
             }
         }
+
+        // Floating Screenshot Saved Banner
+        ScreenshotSavedBanner(
+            screenshotName = screenshotSuccess,
+            onDismiss = { viewModel.clearScreenshotSuccess() },
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = if (resumeNotification != null) 64.dp else 16.dp)
+        )
     }
 }
